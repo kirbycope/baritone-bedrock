@@ -364,7 +364,7 @@ class TraverseRunTest(unittest.TestCase):
     def test_skips_forward_when_teleported_ahead(self):
         world = flat(radius=30)
         path = plan(world, (0, Y, 0), GoalXZ(12, 0))
-        h = Harness(world, (0.5, Y, 0.5), yaw=-90.0)
+        h = Harness(world, (0.5, Y, 0.5), yaw=-90.0, settings=Settings(sprintJumping=False))   # the walk, not the hops
         ex = h.execute(path)
         h.run(3)
         self.assertLessEqual(ex.path_position, 1)
@@ -378,7 +378,7 @@ class TraverseRunTest(unittest.TestCase):
     def test_cancels_three_blocks_off_the_path(self):
         world = flat(radius=30)
         path = plan(world, (0, Y, 0), GoalXZ(12, 0))
-        h = Harness(world, (0.5, Y, 0.5), yaw=-90.0)
+        h = Harness(world, (0.5, Y, 0.5), yaw=-90.0, settings=Settings(sprintJumping=False))
         ex = h.execute(path)
         h.run(3)
         h.sim.teleport(3.5, Y, 4.5)                             # 4 blocks beside the line
@@ -404,7 +404,7 @@ class TraverseRunTest(unittest.TestCase):
     def test_times_a_movement_out(self):
         world = flat(radius=30)
         path = plan(world, (0, Y, 0), GoalXZ(12, 0))
-        h = Harness(world, (0.5, Y, 0.5), yaw=-90.0)
+        h = Harness(world, (0.5, Y, 0.5), yaw=-90.0, settings=Settings(sprintJumping=False))
         ex = h.execute(path)
         h.sim.frozen = True
         h.run(95)
@@ -473,10 +473,11 @@ class AscendDescendRunTest(unittest.TestCase):
         world = flat(radius=20)
         clear(world, 3, Y - 4, -20, 5, Y - 1, 20)                # a gap three wide across the whole world, nothing under it
         hotbar = [None, {"type": "minecraft:dirt", "amount": 8}] + [None] * 7
-        path = plan(world, (0, Y, 0), GoalXZ(8, 0), hotbar=hotbar)
+        settings = Settings(allowParkour=False)                  # the bridge, not the jump the planner now prefers
+        path = plan(world, (0, Y, 0), GoalXZ(8, 0), hotbar=hotbar, settings=settings)
         self.assertEqual(path.get_dest(), (8, Y, 0))
         self.assertTrue(all(isinstance(m, MovementTraverse) for m in path.movements()))
-        h = Harness(world, (0.5, Y, 0.5), yaw=-90.0, hotbar=hotbar)
+        h = Harness(world, (0.5, Y, 0.5), yaw=-90.0, hotbar=hotbar, settings=settings)
         ex = h.execute(path)
         pl = h.run(500, until=lambda p: ex.finished() or ex.failed())
         self.assertTrue(ex.finished(), f"position {ex.path_position} of {path.length()} feet {pl.feet} at {pl.x:.2f} {pl.y:.2f}")

@@ -10,7 +10,8 @@ class Settings:
     allowBreak: bool = True
     allowPlace: bool = True
     allowSprint: bool = True
-    allowParkour: bool = False            # S:362: "very unreliable and falls off when cornering"; phase 3 turns it on
+    allowParkour: bool = True             # Baritone: false (S:362 "very unreliable and falls off when cornering"); on since
+                                          # the course landed 12 of 12 (dist 2, 3, 4 and up 1, three runs) on 28 October 2026
     allowParkourPlace: bool = False
     allowParkourAscend: bool = True
     maxParkourJump: int = 4               # departs: the longest parkour dist the planner may use (Park:104-113 says 4
@@ -55,7 +56,8 @@ class Settings:
     simplifyUnloadedYCoord: bool = True
     # execution (S:379-436, 540-615, 833, 929)
     sprintAscends: bool = True
-    sprintJumping: bool = False           # phase 3
+    sprintJumping: bool = True            # Baritone: false; on since the course proved the hops land (100 flat blocks in 23 s
+                                          # against 26 s, 21 hops, none short; none attempted down the stairs)
     sprintJumpingDiagonals: bool = True
     headHitters: bool = False
     overshootTraverse: bool = True

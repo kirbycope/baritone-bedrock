@@ -62,6 +62,34 @@ class ConstantsTest(unittest.TestCase):
         self.assertAlmostEqual(SPRINT_GROUND_ACCEL / (1 - GROUND_FRICTION), SPRINT, places=3)
 
 
+class MeasuredTraceTest(unittest.TestCase):
+    """The simulation against the client's own sprint jump, when calibrate --trace-jump has recorded one in
+    calibration.json (git-ignored, so this skips on a fresh clone): on this PC the trace was 3.629 blocks, a
+    0.4806 takeoff step and a 0.2863 air step, which is the simulation to three decimals."""
+
+    def test_simulation_matches_the_recorded_trace(self):
+        from baritone_bedrock.costs import load_calibration
+        trace = (load_calibration().get("jump") or {}).get("sprint_jump_trace") or {}
+        if not trace.get("trace"):
+            self.skipTest("no sprint_jump_trace in calibration.json")
+        speed = (load_calibration().get("speeds") or {}).get("sprint", 5.612) / 20
+        sj = runway([0] * 11)
+        landing = sj.jump(0.0, speed * GROUND_FRICTION)
+        self.assertAlmostEqual(landing.s, trace["length"], delta=0.05)
+        self.assertAlmostEqual(trace["takeoff_step"], speed * GROUND_FRICTION + JUMP_BOOST + SPRINT_GROUND_ACCEL, delta=0.005)
+        self.assertAlmostEqual(trace["air_step"], (speed * GROUND_FRICTION + JUMP_BOOST + SPRINT_GROUND_ACCEL) * GROUND_FRICTION + AIR_ACCEL, delta=0.01)
+        self.assertAlmostEqual(trace["apex"], 1.252, delta=0.01)
+        self.assertTrue(trace.get("velocity_is_displacement"), "the executor reads the probe's velocity as the displacement")
+        ys = [r["y"] - trace["trace"][0]["y"] for r in trace["trace"] if not r["ground"]]
+        y, vy, sim = 0.0, JUMP, []
+        for _ in range(len(ys)):
+            y += vy
+            sim.append(y)
+            vy = (vy - GRAVITY) * 0.98
+        for measured, simulated in zip(ys, sim):
+            self.assertAlmostEqual(measured, simulated, delta=0.01)
+
+
 class FlightTest(unittest.TestCase):
 
     def test_flat_runway_hop_lands_on_the_runway(self):

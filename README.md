@@ -116,10 +116,14 @@ Each band asked for comes back as a POST to `/chunk`:
 `data` has one character per block, `chr(33 + paletteIndex)`, at index `((x * 16) + z) * height + (y - y0)`.
 `ms` is the script time the pack spent reading the band, `wall` the milliseconds from its first column to the post
 and `cells` the blocks read; `Probe.scan_stats` keeps them and the course report sums them per piece. The pack reads
-bands in its tick handler under a budget of 15 ms of script time a tick (`BUDGET_MS` in `pack/scripts/main.js`),
-columns of the band at the head of the queue until the budget is gone, and posts a band the moment it is complete;
-the `system.runJob` with a yield per column it replaced managed one band every 15 ticks and took the server to 17.4
-ticks a second while it ran.
+bands in its tick handler under a budget of script time a tick (`budgetMs` in `pack/scripts/main.js`, 25 by
+default; a `budget` number in a `/tick` answer, `Probe.budget_ms`, changes it without a restart), columns of the
+band at the head of the queue until the budget is gone, and posts a band the moment it is complete. A band costs
+about 42 ms of script time whatever is in it (8192 `getBlock` calls at about 5 us each; the states are only read
+for slabs, stairs, snow layers, doors, gates and liquids), so the budget sets the throughput: the `system.runJob`
+with a yield per column this replaced delivered 25 fresh bands in 3.9 s and took the server to 17.4 ticks a second
+while it ran; at 15 ms a tick the same 25 bands took 4.8 s with the server at 19.7 or better, and at 25 ms a tick
+a band arrives every 85 ms or so, a 100 block corridor (about 20 bands) in under 2 s.
 A palette entry is the block's typeId plus the states that change how it is walked, joined as
 `typeId|state=value|...`: `minecraft:vertical_half` (slabs), `upside_down_bit` (stairs), `height` (snow layers),
 `open_bit` (doors, trapdoors, gates), `liquid_depth` (water and lava) and `waterlogged`. A block that could not be
@@ -211,8 +215,12 @@ where the player is; the searches run on a worker thread with the timeouts from 
 
 Sprint jumps (`settings.sprintJumping`, off in Baritone, on in the course run) are `sprintjump.py`, Baritone's
 `SprintJump.java` on the same numbers (gravity 0.08, drag 0.98, jump 0.42, the 0.2 sprint-jump boost, ground
-friction 0.546, air friction 0.91: the calibration's sprint of 5.613 blocks a second against Java's 5.612 and the
-apex of 1.252 are those numbers), planned from `shouldSprintNextTick` (PE:362-366) and flown by `fly()` and
+friction 0.546, air friction 0.91). They are Bedrock's numbers: the per-tick trace `calibrate --trace-jump`
+recorded on this PC (calibration.json, `jump.sprint_jump_trace`) is a hop of 3.629 blocks with a takeoff step of
+0.4806, an air step of 0.2863, the apex at 1.252 and the next ground tick at 0.3867, and the simulation gives
+3.629, 0.4806, 0.2864 and 0.386 from the same start; every y of the flight matches to a hundredth
+(`tests/test_sprintjump.py` checks the simulation against the recorded trace whenever one is present). The hops are
+planned from `shouldSprintNextTick` (PE:362-366) and flown by `fly()` and
 `steer()` (PE:507-535): the runway is the straight run of traverses, ascends and descends ahead with solid floors
 and clear columns, the hop is simulated tick by tick, and it is taken only when every velocity margin (0.85, 1,
 1.15) lands on a runway cell with apex minus landing under 3 (so a drop of 1 is hopped down, a drop of 2 is not),
@@ -259,6 +267,43 @@ landed over attempted, done or not, against the old navigator's 1.2 to 2.4 s a b
 screenshot at each end when the FTUE skill's Client can be imported. `--repeat 3` runs every leg three times for a
 "3 of 3" table; the run has `sprintJumping` and `allowParkour` on unless `--no-sprint-jump` or `--no-parkour` says
 otherwise. `--clear` teleports the player off the course first.
+
+### Phase 3 results, 28 October 2026
+
+All on this PC, the course world 200 blocks over a lake, the FTUE pad, `sprintJumping` and `allowParkour` on
+(the reports are under `captures/course/20261028-12*`):
+
+| piece | time | notes |
+| --- | --- | --- |
+| 1, flat 100, sprint jumps off, scanner at 25 ms | 25.9 s | 11.8 s with a search in progress; this morning, with the old scanner, 30.9 s and 17.1 s |
+| 1, flat 100, sprint jumps on, scanner at 25 ms | 23.0 s | 21 hops, none short, 10.0 s with a search in progress |
+| 1, flat 100, sprint jumps off, scanner at 15 ms (the default) | 28.7 s | 15.3 s with a search in progress |
+| 1, flat 100, sprint jumps on, scanner at 15 ms (the default) | 27.6 s | 21 hops, 15.2 s with a search in progress |
+| 2a, stairs up 10 and down 10 | 15.6 s | no hop attempted on the stairs (a hop down them lands three steps lower, past SAFE_FALL) |
+| 2b, the descending half | 3.8 s | sprint kept through the descends |
+| 8a, parkour dist 2 (gap 1), three runs | 4.4, 3.5, 3.6 s | landed 3 of 3 |
+| 8b, parkour dist 3 (gap 2), three runs | 4.6, 4.2, 4.3 s | landed 4 of 4 (one run planned two jumps) |
+| 8c, parkour dist 4 (gap 3, sprint), three runs | 3.4, 3.4, 3.1 s | landed 3 of 3 |
+| 8d, parkour dist 2 up 1, three runs | 3.3, 3.2, 3.3 s | landed 3 of 3 |
+| 9, dark oak forest 40 by 21 | 16.3 s | 49 positions, 209 nodes, through the undergrowth |
+
+Nobody fell: the lowest y of every run is the pad. The planning time left on piece 1 is the band wait of a course
+in the sky: the pad hangs 100 blocks over water, and Baritone's fall scan (no height cap on a water landing) reads
+every band down to the lake off either side of it, a hundred-odd bands a piece; a walk on real ground has the
+ground right there. It halves with the scanner at 25 ms a tick and costs the tick rate, see below.
+
+Two things that spoiled runs before they were understood, both now visible in the course log: under 7 food the
+executor never sprints (PE:357-359), so there are no hops, no dist 4 parkour and a walking pace, and the player's
+hunger had reached 6 by the fourth piece 1 run (the course prints `FOOD n` at a start when that is so; the course
+is a rig, `effect saturation` fixes it); and for ten or twenty seconds after a rejoin the client can ignore the pad
+entirely (the sticks and the camera command stand while nothing moves), which read as a movement timeout.
+
+The scanner numbers that set the budget: the old `runJob` scanner delivered 25 fresh bands in 3.9 s with the server
+down to 17.4 ticks a second; the tick-budget scanner at 15 ms a tick takes 3.3 to 4.8 s for 25 bands (about 50 ms
+of script time a band, 6 or 7 bands a second) with the server at 19.6 to 19.9; at 25 ms a tick 2.2 s but 15 to 17
+ticks a second; at 30 ms 2.4 s and 14.9. The default is 15, the tick rate first; a caller that would rather have the
+corridor in 2 s sets `Probe.budget_ms = 25`. A filtered pass with `Dimension.getBlocks` was tried and dropped (same
+cost, unreliable counts, overshoots the budget: the comment in `pack/scripts/main.js` has the numbers).
 
 ## Calibration
 

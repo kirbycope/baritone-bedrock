@@ -44,7 +44,6 @@ class Navigator:
         self.goal = None
         self._events = []
         self._said_movement = None
-        self._prefetched = {}
         self.last_search_stats = []
         self.parkour = []            # per go(): {src, dest, dist, ascend, status} for every parkour movement run
         self.flights = 0             # per go(): sprint jumps taken
@@ -212,9 +211,9 @@ class Navigator:
     def prefetch_ahead(self, pl, goal):
         """Ask the pack, without waiting, for the bands along the line to the goal: the chunk column at each of
         PREFETCH_REACH blocks ahead and the two beside it, at the feet's height, so the planner finds them read when
-        it gets there. The pack reads a band in about 25 ms of script time under a 15 ms a tick budget (pack/
-        scripts/main.js), a dozen a second, so a corridor's worth asked at once is read before the walk reaches
-        it; each column is asked once per 15 s."""
+        it gets there. The pack reads a band in about 50 ms of script time under a 15 ms a tick budget (pack/
+        scripts/main.js), six or seven a second, so a corridor's worth asked at once is read before the walk reaches
+        it; the probe asks for a key once per 10 s."""
         gx, gz = getattr(goal, "x", None), getattr(goal, "z", None)
         if gx is None or gz is None:
             return
@@ -233,13 +232,11 @@ class Navigator:
             for side in (0, 1, -1):
                 x, z = int(math.floor(ax + px * 16 * side)), int(math.floor(az + pz * 16 * side))
                 keys.append((self.dimension, x >> 4, z >> 4, fy // self.terrain.BAND * self.terrain.BAND))
-        now = time.time()
-        fresh = [k for k in keys if k not in self.terrain.bands and now - self._prefetched.get(k, 0) > 15]
-        if not fresh:
-            return
-        for k in fresh:
-            self._prefetched[k] = now
-        self.probe.scan(fresh, timeout=0.001)
+        # through the terrain, so a band read while part of its chunk was unloaded (a "?" in it, which a search
+        # counts toward pathingMaxChunkBorderFetch) is read again after four seconds with the old one readable
+        # until the new one lands (a band forgotten outright made the path under the player unknown, and the
+        # executor cancelled it: piece 1 went from 23 s to 33 s with no hops)
+        self.terrain.prefetch(keys, timeout=0.001)
 
     def rescan_around(self, pl):
         """Forget the bands round the player that still hold unread blocks, so the next search reads them afresh."""

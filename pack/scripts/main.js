@@ -12,7 +12,8 @@
 //                events: [{type: "break"|"place"|"hurt", tick, dim, x, y, z, block, player, damage, cause}]
 //                blocks: [{dim, x, y, z, entry}] the palette entry now at a block a break or place event changed
 //                results: [{cmd, ok, successCount, error}] of the commands the last answer carried
-//                answered with {scan: [[dim, cx, cz, y0, y1], ...], commands: ["fill ...", {dim, cmd}, ...]}
+//                answered with {scan: [[dim, cx, cz, y0, y1], ...], commands: ["fill ...", {dim, cmd}, ...]} and
+//                an optional budget: the ms of script time a tick the scanner may use from then on
 //   POST /chunk  {dim, cx, cz, y0, y1, height, palette, data, ms, wall, cells}: one band of a chunk, data one character a block,
 //                chr(33 + paletteIndex), index ((x * 16) + z) * height + (y - y0); palette entries are "typeId" or
 //                "typeId|state=value|..." carrying only the states that change how a block is walked; "?" is a block
@@ -64,12 +65,19 @@ function post(path, body) {
 
 const queue = [];          // bands to read, in the order asked
 let current = null;        // the band being read: {dim, cx, cz, y0, y1, height, cells, col, dimension, ms, t0}
-const BUDGET_MS = 15;      // of script time a tick; a 50 ms tick keeps 19.5 reports a second or more at this
+let budgetMs = 15;         // of script time a tick: 15 held 19.6 to 19.9 reports a second on a world with two heavy
+                           // packs, 25 dropped it to 17 (a band every 85 ms, a 20 band corridor in 2.2 s) and 30 to
+                           // 15; the runner can set it with a "budget" number in a /tick answer
 const COLUMNS_A_STEP = 4;  // columns read between clock checks
+// A band costs about 45 to 50 ms of script time whatever is in it: 8192 getBlock calls at 5 to 6 us each, the
+// JS-to-native boundary. Dimension.getBlocks with a type filter was tried instead (one native call per common type,
+// getBlock for the rest): the same 50 ms a band, since walking its location iterator costs as much as the calls it
+// saves, its counts were unreliable (2 cells for a band of air, 8277 for a band of 8192) and its long native calls
+// overshot the budget and took the tick rate to 16.5, so it is not here.
 
 function scanSome() {
     const start = Date.now();
-    while (Date.now() - start < BUDGET_MS) {
+    while (Date.now() - start < budgetMs) {
         if (current === null) {
             if (!queue.length) return;
             const [dim, cx, cz, y0, y1] = queue.shift();
@@ -222,6 +230,7 @@ system.runInterval(() => {
         let answer = {};
         try { answer = JSON.parse(response.body || "{}") || {}; } catch (e) { }
         for (const s of answer.scan || []) queue.push(s);
+        if (typeof answer.budget === "number" && answer.budget >= 1 && answer.budget <= 45) budgetMs = answer.budget;
         const commands = answer.commands || [];
         if (commands.length) system.run(() => runCommands(commands));   // inside a tick, never in the promise
     }).catch(() => { inFlight = false; quiet = 20; unsend(sent); });

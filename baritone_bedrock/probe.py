@@ -115,6 +115,7 @@ class Probe:
         self._tick_times = deque(maxlen=64)
         self._events, self._commands, self._pending, self.stray_results = [], [], deque(), []
         self.scan_stats = deque(maxlen=512)   # (key, ms, wall, cells, arrival) per /chunk, from the pack's timing fields
+        self.budget_ms = None                 # when set, sent in every /tick answer: the pack's scan budget a tick
         probe = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -163,7 +164,10 @@ class Probe:
                 commands, self._commands = self._commands, []
                 self._pending.extend(commands)
                 self.cv.notify_all()
-                return {"scan": wanted, "commands": [{"dim": c["dim"], "cmd": c["cmd"]} for c in commands]}
+                answer = {"scan": wanted, "commands": [{"dim": c["dim"], "cmd": c["cmd"]} for c in commands]}
+                if self.budget_ms is not None:
+                    answer["budget"] = self.budget_ms
+                return answer
             if path == "/chunk":
                 try:
                     key = (body["dim"], body["cx"], body["cz"], body["y0"] // BAND * BAND)
@@ -306,18 +310,22 @@ class ProbeTerrain(world.Terrain):
     def _key(self, x, y, z):
         return (self.dimension, x >> 4, z >> 4, y // BAND * BAND)
 
-    def _fetch(self, keys):
+    def _fetch(self, keys, timeout=None):
+        """Read the keys not held, and read again those held but partial for more than four seconds; with a
+        timeout, ask and take what is complete by then (a prefetch), else wait for them all."""
         now = time.time()
         keys = [k for k in dict.fromkeys(keys)
                 if k not in self.bands or (self.bands[k].partial and now - self.bands[k].read_at > 4)]
         if not keys:
             return
         for k in keys:
-            if k in self.bands:   # a re-read: the old band stays readable until the new one arrives
-                self.probe.forget(k)
-        for key, band in self.probe.scan(keys).items():
-            self.bands[key] = band
-            self.reads += 1
+            if k in self.bands:   # a re-read: the old band stays readable until the new one arrives, and is not
+                self.probe.forget(k)   # asked again for another four seconds while that one is on its way
+                self.bands[k].read_at = now
+        for key, band in self.probe.scan(keys, timeout=timeout).items():
+            if band is not self.bands.get(key):
+                self.bands[key] = band
+                self.reads += 1
 
     def section(self, x, y, z):
         """A miss in the middle of a search: the chunks round it are read with it, one request for nine, since the
@@ -327,9 +335,11 @@ class ProbeTerrain(world.Terrain):
             self._fetch([key] + [(key[0], key[1] + dx, key[2] + dz, key[3]) for dx in (-1, 0, 1) for dz in (-1, 0, 1)])
         return key in self.bands
 
-    def prefetch(self, keys):
-        """Bands (dim, cx, cz, y0) to read ahead of a search, in one request."""
-        self._fetch(list(keys))
+    def prefetch(self, keys, timeout=None):
+        """Bands (dim, cx, cz, y0) to read ahead of a search, in one request; with a timeout (the navigator passes
+        a millisecond every tick) the request goes out and whatever has arrived by then is taken, the rest on a
+        later call."""
+        self._fetch(list(keys), timeout=timeout)
 
     def kind(self, x, y, z):
         key = self._key(x, y, z)

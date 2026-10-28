@@ -215,6 +215,10 @@ class ProbeTest(unittest.TestCase):
         self.assertEqual(len(self.probe.scan_stats), 1)
         key, ms, wall, cells, at = self.probe.scan_stats[0]
         self.assertEqual((key, ms, wall, cells), (("overworld", 2, 1, 64), 27, 110, 8192))
+        self.probe.budget_ms = 15
+        self.assertEqual(self.tick(), {"scan": [], "commands": [], "budget": 15})
+        self.probe.budget_ms = None
+        self.assertEqual(self.tick(), {"scan": [], "commands": []})
         for cx in (1, 2):
             band = self.probe.band(("overworld", cx, 1, 64))
             self.assertTrue(band.complete)

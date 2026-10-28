@@ -397,8 +397,10 @@ class ParkourTest(unittest.TestCase):
         clear(world, 1, Y - 1, 0, width, Y - 1, 0)
         return world
 
-    def test_off_by_default(self):
-        self.assertGreaterEqual(parkour(ctx_for(self.gap(1)), 0, Y, 0, 1, 0).cost, COST_INF)              # Park:64-66
+    def test_off_when_not_allowed(self):
+        self.assertGreaterEqual(parkour(ctx_for(self.gap(1), allowParkour=False), 0, Y, 0, 1, 0).cost, COST_INF)   # Park:64-66
+        self.assertLess(parkour(ctx_for(self.gap(1)), 0, Y, 0, 1, 0).cost, COST_INF, "on by default since phase 3")
+        self.assertGreaterEqual(parkour(ctx_for(self.gap(3), maxParkourJump=3), 0, Y, 0, 1, 0).cost, COST_INF)    # departs: the cap
 
     def test_flat_jumps(self):
         res = parkour(ctx_for(self.gap(1), allowParkour=True), 0, Y, 0, 1, 0)

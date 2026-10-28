@@ -525,6 +525,11 @@ def run_course(pieces, probe, controller, who, outdir, shots=True, timeout=300, 
                 log(f"piece {tag} ({label}){f' run {run}' if repeat > 1 else ''}: {sx},{sy},{sz} -> {ex},{ey},{ez}")
                 course.tp(sx + 0.5, sy, sz + 0.5, yaw=yaw_to(1, 0))
                 nav.stand_up()
+                food = ((course.player() or {}).get("food") or {}).get("current")
+                if food is not None and food <= 6:
+                    # PE:357-359: no sprint under 7 food, so no hops, no dist 4 parkour and a walking pace: every
+                    # number of the piece is wrong until the player eats (the course is a rig: saturation is allowed)
+                    log(f"  FOOD {food}: the player cannot sprint; the piece's numbers will not mean anything")
                 if client and run == 1:
                     client.shot(f"p{tag}_start")
                 t0 = time.time()
@@ -548,7 +553,7 @@ def run_course(pieces, probe, controller, who, outdir, shots=True, timeout=300, 
                 row = {"piece": tag, "name": label, "run": run, "blocks": ex - sx, "seconds": round(elapsed, 1), "done": done,
                        "left": None if left is None else round(left, 2), "path_positions": walked, "segments": len(stats),
                        "nodes": nodes, "planner_ms": round(ms), "gathered": gathered, "dead": not course.alive(),
-                       "jumps": nav.flights, "parkour": parkour,
+                       "jumps": nav.flights, "parkour": parkour, "food": food,
                        "parkour_ok": sum(1 for r in parkour if r["status"] == "SUCCESS"),
                        "bands": len(scans), "band_ms": round(sum((s[1] or 0) for s in scans)),
                        "end": [round(p.get("x", 0), 1), round(p.get("y", 0), 1), round(p.get("z", 0), 1)]}
