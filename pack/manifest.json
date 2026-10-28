@@ -1,0 +1,41 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "baritone-probe",
+    "description": "Test only: streams every player state each tick, terrain as palette bands on request, break, place and hurt events, and runs the caller commands, for baritone-bedrock on this machine.",
+    "uuid": "fb4fa8e1-26c4-4efa-8037-dc1e578ccf96",
+    "version": [
+      0,
+      2,
+      0
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      0
+    ]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "951bc2eb-e6d9-4794-9982-2c1e9761e3b3",
+      "version": [
+        0,
+        2,
+        0
+      ],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.6.0"
+    },
+    {
+      "module_name": "@minecraft/server-net",
+      "version": "1.0.0-beta"
+    }
+  ]
+}

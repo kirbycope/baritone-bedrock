@@ -1,0 +1,6 @@
+/java/
+/watchdog/
+__pycache__/
+*.pyc
+/calibration.json
+/captures/

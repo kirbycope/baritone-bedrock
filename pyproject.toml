@@ -1,0 +1,15 @@
+[project]
+name = "baritone-bedrock"
+version = "0.1.0"
+description = "Baritone's pathing for Minecraft Bedrock: plans in ticks, drives the real client through a controller, reads the world through its own behavior pack"
+readme = "README.md"
+license = { text = "LGPL-3.0-or-later" }
+requires-python = ">=3.10"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["baritone_bedrock*"]
